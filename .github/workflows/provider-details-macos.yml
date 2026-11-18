@@ -1,0 +1,138 @@
+name: Provider details macOS
+run-name: Provider details macOS · ${{ github.sha }}
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: provider-details-macos
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+        working-directory: codex-rs
+    env:
+      CARGO_BUILD_JOBS: "2"
+      CARGO_INCREMENTAL: "0"
+      CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+      CARGO_PROFILE_RELEASE_OPT_LEVEL: "1"
+      CARGO_PROFILE_RELEASE_LTO: "false"
+      CARGO_PROFILE_RELEASE_DEBUG: "0"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+      CARGO_PROFILE_RELEASE_STRIP: symbols
+      CARGO_TARGET_DIR: ${{ github.workspace }}/codex-rs/target
+      CODEX_REPO_ROOT: ${{ github.workspace }}
+      STABLE_GIT_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Verify native architecture and source
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          test "$(git rev-parse HEAD)" = "$STABLE_GIT_COMMIT"
+          df -h .
+
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+
+      - name: Restore Cargo cache
+        id: cargo-cache
+        uses: actions/cache/restore@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/src
+            ~/.cargo/git/db
+            ~/.cargo/git/checkouts
+            codex-rs/target
+          key: provider-details-macos-arm64-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml', '.github/workflows/provider-details-macos.yml') }}-${{ github.sha }}
+          restore-keys: |
+            provider-details-macos-arm64-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml', '.github/workflows/provider-details-macos.yml') }}-
+
+      - name: Use checksum-verified public V8 archive
+        uses: ./.github/actions/setup-rusty-v8
+        with:
+          target: aarch64-apple-darwin
+
+      - name: Build the CLI with app-server dispatch
+        run: cargo build --locked --release -p codex-cli --bin codex
+
+      - name: Verify provider details across API and protocols
+        run: |
+          cargo test --locked --release --lib \
+            -p codex-api -p codex-protocol -p codex-app-server-protocol \
+            provider_error -- --nocapture
+
+      - name: Verify existing semantic recovery classifications
+        run: |
+          set -euo pipefail
+          for filter in context_window quota server_overloaded; do
+            cargo test --locked --release -p codex-api --lib "$filter" -- --nocapture
+          done
+
+      - name: Sign, smoke test, and package the binary
+        run: |
+          set -euo pipefail
+          mkdir -p ../provider-details-artifact
+          cp "$CARGO_TARGET_DIR/release/codex" ../provider-details-artifact/codex
+          binary="$CODEX_REPO_ROOT/provider-details-artifact/codex"
+          codesign --force --sign - "$binary"
+          codesign --verify --strict --verbose=2 "$binary"
+          "$binary" --version
+          "$binary" app-server --help
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import subprocess
+
+          artifact = pathlib.Path(os.environ["CODEX_REPO_ROOT"]) / "provider-details-artifact"
+          binary = artifact / "codex"
+          digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+          metadata = {
+              "sourceCommit": os.environ["STABLE_GIT_COMMIT"],
+              "workflowRun": f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+              "target": "aarch64-apple-darwin",
+              "version": subprocess.check_output([str(binary), "--version"], text=True).strip(),
+              "sha256": digest,
+              "profile": {key: value for key, value in os.environ.items() if key.startswith("CARGO_PROFILE_RELEASE_")},
+          }
+          (artifact / "manifest.json").write_text(json.dumps(metadata, indent=2) + "\n")
+          (artifact / "SHA256SUMS").write_text(f"{digest}  codex\n")
+          PY
+          tar -czf ../provider-details-artifact/codex-aarch64-apple-darwin.tar.gz \
+            -C ../provider-details-artifact codex manifest.json SHA256SUMS
+          rm ../provider-details-artifact/codex
+
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: codex-provider-details-macos-arm64-${{ github.sha }}
+          path: provider-details-artifact/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Save Cargo cache even after a test failure
+        if: ${{ always() && !cancelled() && steps.cargo-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/registry/src
+            ~/.cargo/git/db
+            ~/.cargo/git/checkouts
+            codex-rs/target
+          key: ${{ steps.cargo-cache.outputs.cache-primary-key }}
