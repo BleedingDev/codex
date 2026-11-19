@@ -44,6 +44,11 @@ jobs:
           test "$(git rev-parse HEAD)" = "$STABLE_GIT_COMMIT"
           df -h .
 
+      - name: Free hosted runner disk for Cargo
+        run: |
+          sudo rm -rf /Users/runner/Library/Android/sdk
+          df -h .
+
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
         with:
           components: rustfmt
