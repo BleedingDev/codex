@@ -84,11 +84,32 @@ jobs:
           key: provider-details-macos-arm64-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml', '.github/workflows/provider-details-macos.yml') }}-${{ github.sha }}
           restore-keys: |
             provider-details-macos-arm64-${{ hashFiles('codex-rs/Cargo.lock', 'codex-rs/rust-toolchain.toml', '.github/workflows/provider-details-macos.yml') }}-
+            provider-details-macos-arm64-
 
       - name: Use checksum-verified public V8 archive
         uses: ./.github/actions/setup-rusty-v8
         with:
           target: aarch64-apple-darwin
+
+      - name: Resolve workspace lockfile entries without upgrading dependencies
+        id: lockfile
+        run: |
+          set -euo pipefail
+          cargo update --workspace --offline
+          if ! git diff --quiet -- Cargo.lock; then
+            git diff --binary -- Cargo.lock > "$RUNNER_TEMP/provider-details-lock.patch"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::Committed workspace lockfile needed correction; retained patch and lockfile hash."
+          fi
+
+      - name: Upload workspace lockfile correction
+        if: ${{ steps.lockfile.outputs.changed == 'true' }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: provider-details-lock-${{ github.sha }}
+          path: ${{ runner.temp }}/provider-details-lock.patch
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Build the CLI with app-server dispatch
         run: cargo build --locked --release -p codex-cli --bin codex
@@ -132,6 +153,7 @@ jobs:
               "target": "aarch64-apple-darwin",
               "version": subprocess.check_output([str(binary), "--version"], text=True).strip(),
               "sha256": digest,
+              "cargoLockSha256": hashlib.sha256(pathlib.Path("Cargo.lock").read_bytes()).hexdigest(),
               "profile": {key: value for key, value in os.environ.items() if key.startswith("CARGO_PROFILE_RELEASE_")},
           }
           (artifact / "manifest.json").write_text(json.dumps(metadata, indent=2) + "\n")
