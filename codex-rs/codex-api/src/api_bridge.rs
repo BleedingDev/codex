@@ -21,10 +21,18 @@ use serde::Deserialize;
 use serde_json::Value;
 
 pub fn map_api_error(err: ApiError) -> CodexErr {
+    let provider_error = match &err {
+        ApiError::ContextWindowExceeded { provider_error }
+        | ApiError::QuotaExceeded { provider_error }
+        | ApiError::UsageNotIncluded { provider_error }
+        | ApiError::ServerOverloaded { provider_error, .. }
+        | ApiError::SpendLimitExceeded { provider_error, .. } => provider_error.clone(),
+        _ => None,
+    };
     let retry_after = match &err {
         ApiError::Retryable { retry_after, .. }
         | ApiError::RateLimitExceeded { retry_after, .. }
-        | ApiError::ServerOverloaded { retry_after }
+        | ApiError::ServerOverloaded { retry_after, .. }
         | ApiError::PolicyCapacityUnavailable { retry_after }
         | ApiError::Transport(TransportError::Http { retry_after, .. }) => *retry_after,
         ApiError::Transport(_)
@@ -33,10 +41,10 @@ pub fn map_api_error(err: ApiError) -> CodexErr {
         | ApiError::WebsocketMessageTooLarge
         | ApiError::ContentFilter
         | ApiError::ResponseIncomplete(_)
-        | ApiError::ContextWindowExceeded
-        | ApiError::SpendLimitExceeded(_)
-        | ApiError::QuotaExceeded
-        | ApiError::UsageNotIncluded
+        | ApiError::ContextWindowExceeded { .. }
+        | ApiError::SpendLimitExceeded { .. }
+        | ApiError::QuotaExceeded { .. }
+        | ApiError::UsageNotIncluded { .. }
         | ApiError::SessionBudgetExceeded
         | ApiError::FlexUnavailable
         | ApiError::RateLimit(_)
@@ -52,6 +60,10 @@ pub fn map_api_error(err: ApiError) -> CodexErr {
         | ApiError::MisalignmentPolicyViolation { .. } => None,
     };
     let error = map_api_error_details(err);
+    let error = match provider_error {
+        Some(provider_error) => error.with_provider_error(provider_error),
+        None => error,
+    };
     match retry_after {
         Some(retry_after) => error.with_retry_after(retry_after),
         None => error,
@@ -60,12 +72,12 @@ pub fn map_api_error(err: ApiError) -> CodexErr {
 
 fn map_api_error_details(err: ApiError) -> CodexErr {
     match err {
-        ApiError::ContextWindowExceeded => CodexErr::ContextWindowExceeded,
-        ApiError::SpendLimitExceeded(scope) => {
+        ApiError::ContextWindowExceeded { .. } => CodexErr::ContextWindowExceeded,
+        ApiError::SpendLimitExceeded { scope, .. } => {
             CodexErrorDetails::APISpendLimitExceeded(scope).into()
         }
-        ApiError::QuotaExceeded => CodexErr::QuotaExceeded,
-        ApiError::UsageNotIncluded => CodexErr::UsageNotIncluded,
+        ApiError::QuotaExceeded { .. } => CodexErr::QuotaExceeded,
+        ApiError::UsageNotIncluded { .. } => CodexErr::UsageNotIncluded,
         ApiError::SessionBudgetExceeded => CodexErr::SessionBudgetExceeded,
         ApiError::Retryable { message, .. } => CodexErr::Stream(message),
         ApiError::RateLimitExceeded { message, .. } => {
@@ -143,7 +155,7 @@ fn map_api_error_details(err: ApiError) -> CodexErr {
                 let parsed_body = serde_json::from_str::<Value>(&body_text).ok();
                 let provider_error = parsed_body.as_ref().and_then(|body| body.get("error"));
                 if let Some(error) = parse_terminal_provider_error(provider_error, Some(status)) {
-                    return map_api_error_details(error);
+                    return map_api_error(error);
                 }
 
                 if status == http::StatusCode::SERVICE_UNAVAILABLE
@@ -153,7 +165,9 @@ fn map_api_error_details(err: ApiError) -> CodexErr {
                         Some("policy_capacity_unavailable") => {
                             return CodexErr::new(CodexErrorDetails::PolicyCapacityUnavailable);
                         }
-                        Some("server_is_overloaded") => return CodexErr::ServerOverloaded,
+                        Some("server_is_overloaded") => {
+                            return CodexErr::ServerOverloaded.with_provider_error(error.clone());
+                        }
                         Some("slow_down") => {
                             return CodexErr::new(CodexErrorDetails::RateLimitExceeded(
                                 error
@@ -260,7 +274,12 @@ fn map_api_error_details(err: ApiError) -> CodexErr {
                                 rate_limit_reached_type,
                             });
                         } else if err.error.error_type.as_deref() == Some("usage_not_included") {
-                            return CodexErr::UsageNotIncluded;
+                            return match provider_error {
+                                Some(error) => {
+                                    CodexErr::UsageNotIncluded.with_provider_error(error.clone())
+                                }
+                                None => CodexErr::UsageNotIncluded,
+                            };
                         } else if err.error.error_type.as_deref() == Some("insufficient_quota")
                             || matches!(
                                 err.error.code.as_deref(),
@@ -271,7 +290,12 @@ fn map_api_error_details(err: ApiError) -> CodexErr {
                                 )
                             )
                         {
-                            return CodexErr::QuotaExceeded;
+                            return match provider_error {
+                                Some(error) => {
+                                    CodexErr::QuotaExceeded.with_provider_error(error.clone())
+                                }
+                                None => CodexErr::QuotaExceeded,
+                            };
                         }
                     }
 

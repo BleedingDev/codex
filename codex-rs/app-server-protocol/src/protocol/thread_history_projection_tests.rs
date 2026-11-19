@@ -74,11 +74,12 @@ fn projects_turn_lifecycle_without_prior_builder_state() {
 }
 
 #[test]
-fn projects_failed_turn_completion_as_snapshot() {
+fn provider_error_details_survive_failed_turn_projection() {
     let error = ErrorEvent {
         misalignment: None,
         message: "request failed".to_string(),
         codex_error_info: None,
+        additional_details: Some("provider diagnostic".to_string()),
         rejected_audio_file_ids: Vec::new(),
     };
 
@@ -106,7 +107,7 @@ fn projects_failed_turn_completion_as_snapshot() {
                     misalignment: None,
                     message: "request failed".to_string(),
                     codex_error_info: None,
-                    additional_details: None,
+                    additional_details: Some("provider diagnostic".to_string()),
                 }),
                 started_at: Some(10),
                 completed_at: Some(20),

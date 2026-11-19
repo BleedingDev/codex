@@ -7,6 +7,7 @@ use crate::common::ResponseEvent;
 use bytes::Bytes;
 use codex_client::StreamResponse;
 use codex_http_client::RetryAfter;
+use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::error::SpendLimitScope;
 use codex_protocol::protocol::CodexErrorInfo;
 use futures::StreamExt;
@@ -378,20 +379,29 @@ async fn terminal_codes_exit_keep_open_sse_in_both_event_forms() {
                     },
                 )
                 | ("model_not_found", ApiError::ModelNotFound { status: None, .. })
-                | ("insufficient_quota" | "credit_balance_exhausted", ApiError::QuotaExceeded)
+                | ("insufficient_quota" | "credit_balance_exhausted", ApiError::QuotaExceeded { .. })
                 | (
                     "api_key_spend_limit_exceeded",
-                    ApiError::SpendLimitExceeded(SpendLimitScope::ApiKey),
+                    ApiError::SpendLimitExceeded {
+                        scope: SpendLimitScope::ApiKey,
+                        ..
+                    },
                 )
                 | (
                     "project_spend_limit_exceeded",
-                    ApiError::SpendLimitExceeded(SpendLimitScope::Project),
+                    ApiError::SpendLimitExceeded {
+                        scope: SpendLimitScope::Project,
+                        ..
+                    },
                 )
                 | (
                     "organization_spend_limit_exceeded",
-                    ApiError::SpendLimitExceeded(SpendLimitScope::Organization),
+                    ApiError::SpendLimitExceeded {
+                        scope: SpendLimitScope::Organization,
+                        ..
+                    },
                 )
-                | ("usage_not_included", ApiError::UsageNotIncluded)
+                | ("usage_not_included", ApiError::UsageNotIncluded { .. })
                 | ("invalid_prompt", ApiError::InvalidPrompt { .. })
                 | ("misalignment_policy_violation", ApiError::MisalignmentPolicyViolation { .. }) =>
                     {}
@@ -450,4 +460,55 @@ async fn retryable_failed_response_preserves_advice_before_sse_eof() {
         error.retry_delay(/*retry_count*/ 1),
         Some(Duration::from_secs(2))
     );
+}
+
+#[tokio::test(start_paused = true)]
+async fn provider_error_details_survive_typed_failed_responses() {
+    for (code, expected) in [
+        (
+            "context_length_exceeded",
+            CodexErrorInfo::ContextWindowExceeded,
+        ),
+        ("insufficient_quota", CodexErrorInfo::UsageLimitExceeded),
+        ("credit_balance_exhausted", CodexErrorInfo::UsageLimitExceeded),
+        ("usage_not_included", CodexErrorInfo::UsageLimitExceeded),
+        ("server_is_overloaded", CodexErrorInfo::ServerOverloaded),
+        (
+            "api_key_spend_limit_exceeded",
+            CodexErrorInfo::ApiKeySpendLimitExceeded,
+        ),
+        (
+            "project_spend_limit_exceeded",
+            CodexErrorInfo::ProjectSpendLimitExceeded,
+        ),
+        (
+            "organization_spend_limit_exceeded",
+            CodexErrorInfo::OrganizationSpendLimitExceeded,
+        ),
+    ] {
+        let provider_error = json!({
+            "code": code,
+            "message": format!("Provider detail\n{}", "x".repeat(5000)),
+            "type": "provider_failure",
+            "param": null,
+            "headers": {"retry-after": "7", "x-request-id": "provider-request"},
+            "provider_details": {"original": {"status": 529, "extra": [true, null, 42]}},
+        });
+        for event in error_forms(provider_error.clone()) {
+            let error = map_api_error(keep_open_error(event).await);
+            assert_eq!(error.provider_error(), Some(&provider_error), "{code}");
+            assert_eq!(error.to_codex_protocol_error(), expected, "{code}");
+            assert_eq!(
+                error.retry_delay(/*retry_count*/ 1),
+                (code == "server_is_overloaded").then_some(Duration::from_secs(7)),
+                "{code}",
+            );
+            if code == "context_length_exceeded" {
+                assert!(matches!(
+                    error.details(),
+                    CodexErrorDetails::ContextWindowExceeded
+                ));
+            }
+        }
+    }
 }

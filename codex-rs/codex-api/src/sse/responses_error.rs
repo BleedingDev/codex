@@ -45,7 +45,10 @@ pub(super) fn parse_error_event(
             Some(if code == "policy_capacity_unavailable" {
                 ApiError::PolicyCapacityUnavailable { retry_after }
             } else {
-                ApiError::ServerOverloaded { retry_after }
+                ApiError::ServerOverloaded {
+                    retry_after,
+                    provider_error: Some(error.clone()),
+                }
             })
         }
         _ => None,
@@ -54,6 +57,7 @@ pub(super) fn parse_error_event(
 
 pub(super) fn parse_failed_response(response: Option<Value>) -> ApiError {
     let error = response.as_ref().and_then(|response| response.get("error"));
+    let provider_error = error.cloned();
     let retry_after_header = retry_after_header(error.and_then(|error| error.get("headers")));
     if let Some(error) = parse_terminal_provider_error(error, /*status*/ None) {
         return error;
@@ -76,6 +80,7 @@ pub(super) fn parse_failed_response(response: Option<Value>) -> ApiError {
         },
         Some("server_is_overloaded") => ApiError::ServerOverloaded {
             retry_after: retry_after_header,
+            provider_error,
         },
         Some("rate_limit_exceeded" | "slow_down") => {
             let retry_after = retry_after_header

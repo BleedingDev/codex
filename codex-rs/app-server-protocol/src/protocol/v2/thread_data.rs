@@ -456,7 +456,7 @@ pub struct TurnError {
 
 impl From<codex_protocol::protocol::ErrorEvent> for TurnError {
     fn from(error: codex_protocol::protocol::ErrorEvent) -> Self {
-        let additional_details = None;
+        let additional_details = error.additional_details;
         Self {
             message: error.message,
             codex_error_info: error.codex_error_info.map(Into::into),

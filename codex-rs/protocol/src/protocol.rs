@@ -2386,6 +2386,8 @@ impl fmt::Debug for MisalignmentSteer {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
 pub struct ErrorEvent {
     pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub additional_details: Option<String>,
     #[serde(default)]
     pub codex_error_info: Option<CodexErrorInfo>,
     /// Host-only file identities proven rejected against the submitted request.
@@ -6332,6 +6334,7 @@ mod tests {
             misalignment: None,
             message: "rollback failed".into(),
             codex_error_info: Some(CodexErrorInfo::ThreadRollbackFailed),
+            additional_details: None,
             rejected_audio_file_ids: Vec::new(),
         };
         assert!(!event.affects_turn_status());
@@ -6345,6 +6348,7 @@ mod tests {
             codex_error_info: Some(CodexErrorInfo::ActiveTurnNotSteerable {
                 turn_kind: NonSteerableTurnKind::Review,
             }),
+            additional_details: None,
             rejected_audio_file_ids: Vec::new(),
         };
         assert!(!event.affects_turn_status());
@@ -6356,6 +6360,7 @@ mod tests {
             misalignment: None,
             message: "generic".into(),
             codex_error_info: Some(CodexErrorInfo::Other),
+            additional_details: None,
             rejected_audio_file_ids: Vec::new(),
         };
         assert!(event.affects_turn_status());
@@ -6366,6 +6371,7 @@ mod tests {
         let event = ErrorEvent {
             message: "This request violated the misalignment policy.".to_string(),
             codex_error_info: Some(CodexErrorInfo::MisalignmentPolicyViolation),
+            additional_details: None,
             rejected_audio_file_ids: Vec::new(),
             misalignment: Some(MisalignmentErrorDetails {
                 error_type: Some("unauthorized_data_transfer".to_string()),
@@ -6400,6 +6406,7 @@ mod tests {
         let event = ErrorEvent {
             message: "invalid recording".to_string(),
             codex_error_info: Some(CodexErrorInfo::BadRequest),
+            additional_details: None,
             rejected_audio_file_ids: vec!["file_audio".to_string()],
             misalignment: None,
         };

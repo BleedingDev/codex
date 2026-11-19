@@ -87,6 +87,7 @@ pub struct CodexErr {
     details: CodexErrorDetails,
     retry_after: Option<RetryAfter>,
     agent_context: Option<AgentErrorContext>,
+    provider_error: Option<serde_json::Value>,
 }
 
 enum RetryPolicy {
@@ -324,6 +325,7 @@ impl From<CodexErrorDetails> for CodexErr {
             details,
             retry_after: None,
             agent_context: None,
+            provider_error: None,
         }
     }
 }
@@ -389,6 +391,7 @@ macro_rules! codex_err_unit_constructors {
                 details: CodexErrorDetails::$variant,
                 retry_after: None,
                 agent_context: None,
+                provider_error: None,
             };
         )*
     };
@@ -576,6 +579,15 @@ impl CodexErr {
         self
     }
 
+    pub fn with_provider_error(mut self, provider_error: serde_json::Value) -> Self {
+        self.provider_error = Some(provider_error);
+        self
+    }
+
+    pub fn provider_error(&self) -> Option<&serde_json::Value> {
+        self.provider_error.as_ref()
+    }
+
     /// Minimal shim so that existing `e.downcast_ref::<CodexErr>()` checks continue to compile
     /// after replacing `anyhow::Error` in the return signature. This mirrors the behavior of
     /// `anyhow::Error::downcast_ref` but works directly on our concrete error type.
@@ -651,6 +663,7 @@ impl CodexErr {
         ErrorEvent {
             message,
             codex_error_info: Some(self.to_codex_protocol_error()),
+            additional_details: self.provider_error().map(serde_json::Value::to_string),
             rejected_audio_file_ids: Vec::new(),
             misalignment: match &self.details {
                 CodexErrorDetails::MisalignmentPolicyViolation { misalignment, .. } => {

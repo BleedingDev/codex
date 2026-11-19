@@ -23,13 +23,16 @@ pub enum ApiError {
     #[error(transparent)]
     ResponseIncomplete(Box<ResponseIncompleteError>),
     #[error("context window exceeded")]
-    ContextWindowExceeded,
+    ContextWindowExceeded { provider_error: Option<Value> },
     #[error("quota exceeded")]
-    QuotaExceeded,
+    QuotaExceeded { provider_error: Option<Value> },
     #[error("spend limit exceeded")]
-    SpendLimitExceeded(SpendLimitScope),
+    SpendLimitExceeded {
+        scope: SpendLimitScope,
+        provider_error: Option<Value>,
+    },
     #[error("usage not included")]
-    UsageNotIncluded,
+    UsageNotIncluded { provider_error: Option<Value> },
     #[error("session budget exceeded")]
     SessionBudgetExceeded,
     #[error("retryable error: {message}")]
@@ -83,7 +86,10 @@ pub enum ApiError {
     #[error("policy-restricted capacity unavailable")]
     PolicyCapacityUnavailable { retry_after: Option<RetryAfter> },
     #[error("server overloaded")]
-    ServerOverloaded { retry_after: Option<RetryAfter> },
+    ServerOverloaded {
+        retry_after: Option<RetryAfter>,
+        provider_error: Option<Value>,
+    },
 }
 
 impl From<RateLimitError> for ApiError {
@@ -103,8 +109,12 @@ pub(crate) fn parse_terminal_provider_error(
         .and_then(Value::as_str)
         .filter(|message| !message.trim().is_empty());
     match (code, status) {
-        ("insufficient_quota" | "credit_balance_exhausted", None) => Some(ApiError::QuotaExceeded),
-        ("usage_not_included", None) => Some(ApiError::UsageNotIncluded),
+        ("insufficient_quota" | "credit_balance_exhausted", None) => Some(ApiError::QuotaExceeded {
+            provider_error: Some(error.clone()),
+        }),
+        ("usage_not_included", None) => Some(ApiError::UsageNotIncluded {
+            provider_error: Some(error.clone()),
+        }),
         ("invalid_prompt", None) => Some(ApiError::InvalidPrompt {
             message: error
                 .get("message")
@@ -121,13 +131,22 @@ pub(crate) fn parse_terminal_provider_error(
             }),
         }),
         ("api_key_spend_limit_exceeded", None | Some(StatusCode::TOO_MANY_REQUESTS)) => {
-            Some(ApiError::SpendLimitExceeded(SpendLimitScope::ApiKey))
+            Some(ApiError::SpendLimitExceeded {
+                scope: SpendLimitScope::ApiKey,
+                provider_error: Some(error.clone()),
+            })
         }
         ("project_spend_limit_exceeded", None | Some(StatusCode::TOO_MANY_REQUESTS)) => {
-            Some(ApiError::SpendLimitExceeded(SpendLimitScope::Project))
+            Some(ApiError::SpendLimitExceeded {
+                scope: SpendLimitScope::Project,
+                provider_error: Some(error.clone()),
+            })
         }
         ("organization_spend_limit_exceeded", None | Some(StatusCode::TOO_MANY_REQUESTS)) => {
-            Some(ApiError::SpendLimitExceeded(SpendLimitScope::Organization))
+            Some(ApiError::SpendLimitExceeded {
+                scope: SpendLimitScope::Organization,
+                provider_error: Some(error.clone()),
+            })
         }
 
         ("inference_hook_denied", None | Some(StatusCode::FORBIDDEN)) => {
@@ -138,7 +157,9 @@ pub(crate) fn parse_terminal_provider_error(
             })
         }
         ("context_length_exceeded", None | Some(StatusCode::BAD_REQUEST)) => {
-            Some(ApiError::ContextWindowExceeded)
+            Some(ApiError::ContextWindowExceeded {
+                provider_error: Some(error.clone()),
+            })
         }
         // A non-streaming 400 already follows the ordinary invalid-request path.
         ("invalid_access_program" | "unsupported_access_program", None) => {

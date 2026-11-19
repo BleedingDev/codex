@@ -209,6 +209,7 @@ fn log_retry(
                 retries,
                 max_retries,
                 sampling_error = %err,
+                provider_error = ?err.provider_error(),
                 "stream disconnected - retrying sampling request ({retries}/{max_retries} in {delay:?})...",
             );
         }
@@ -218,6 +219,7 @@ fn log_retry(
                 retries,
                 max_retries,
                 compact_error = %err,
+                provider_error = ?err.provider_error(),
                 "remote compaction v2 stream failed; retrying request after delay"
             );
         }

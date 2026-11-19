@@ -412,7 +412,7 @@ fn retry_after(error: &ApiError) -> Option<RetryAfter> {
         ApiError::Transport(error) => error.retry_after(),
         ApiError::Retryable { retry_after, .. }
         | ApiError::RateLimitExceeded { retry_after, .. }
-        | ApiError::ServerOverloaded { retry_after }
+        | ApiError::ServerOverloaded { retry_after, .. }
         | ApiError::PolicyCapacityUnavailable { retry_after } => *retry_after,
         _ => None,
     }

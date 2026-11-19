@@ -2513,10 +2513,10 @@ fn websocket_error_detail(err: &ApiError) -> String {
         // These variants format fixed text; retry metadata is typed and never printed.
         ApiError::ContentFilter
         | ApiError::WebsocketMessageTooLarge
-        | ApiError::ContextWindowExceeded
-        | ApiError::SpendLimitExceeded(_)
-        | ApiError::QuotaExceeded
-        | ApiError::UsageNotIncluded
+        | ApiError::ContextWindowExceeded { .. }
+        | ApiError::SpendLimitExceeded { .. }
+        | ApiError::QuotaExceeded { .. }
+        | ApiError::UsageNotIncluded { .. }
         | ApiError::SessionBudgetExceeded
         | ApiError::FlexUnavailable
         | ApiError::ServerOverloaded { .. }

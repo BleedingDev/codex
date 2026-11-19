@@ -755,3 +755,56 @@ fn usage_limit_reached_with_promo_message() {
         assert_eq!(err.to_string(), expected);
     });
 }
+
+#[test]
+fn provider_error_details_preserve_semantics_and_survive_rollout_serialization() {
+    let provider_error = serde_json::json!({
+        "message": "provider failure\n".repeat(400),
+        "code": "provider_code",
+        "provider": {"request_id": "request-123", "diagnostics": [1, {"retained": true}]}
+    });
+    for details in [
+        CodexErrorDetails::ContextWindowExceeded,
+        CodexErrorDetails::QuotaExceeded,
+        CodexErrorDetails::APISpendLimitExceeded(SpendLimitScope::ApiKey),
+        CodexErrorDetails::APISpendLimitExceeded(SpendLimitScope::Project),
+        CodexErrorDetails::APISpendLimitExceeded(SpendLimitScope::Organization),
+        CodexErrorDetails::UsageNotIncluded,
+        CodexErrorDetails::ServerOverloaded,
+    ] {
+        let error = CodexErr::new(details);
+        let kind = CodexErrKind::from(&error);
+        let info = error.to_codex_protocol_error();
+        let message = error.to_string();
+        let retryable = error.retry_delay(1).is_some();
+        let error = error.with_provider_error(provider_error.clone());
+        assert_eq!(CodexErrKind::from(&error), kind);
+        assert_eq!(error.to_codex_protocol_error(), info);
+        assert_eq!(error.to_string(), message);
+        assert_eq!(error.retry_delay(1).is_some(), retryable);
+        assert_eq!(error.provider_error(), Some(&provider_error));
+
+        let event = error.to_error_event(None);
+        let stored = serde_json::to_value(&event).unwrap();
+        let restored: ErrorEvent = serde_json::from_value(stored).unwrap();
+        let details: serde_json::Value =
+            serde_json::from_str(restored.additional_details.as_deref().unwrap()).unwrap();
+        assert_eq!(details, provider_error);
+        assert_eq!(restored.codex_error_info, Some(info));
+        assert!(restored.additional_details.unwrap().len() > 4096);
+    }
+}
+
+#[test]
+fn provider_error_details_preserve_server_retry_advice() {
+    let retry_after = RetryAfter::from_delay(Duration::from_secs(30)).unwrap();
+    let error = CodexErr::ServerOverloaded
+        .with_retry_after(retry_after)
+        .with_provider_error(serde_json::json!({"code": "server_is_overloaded"}));
+    assert_eq!(error.retry_after(), Some(retry_after));
+    assert!(error.retry_delay(1).is_some());
+    assert_eq!(
+        error.to_codex_protocol_error(),
+        CodexErrorInfo::ServerOverloaded
+    );
+}

@@ -816,6 +816,7 @@ async fn wait_for_guardian_review_ignores_prior_turn_errors() {
                 misalignment: None,
                 message: "stale guardian error".to_string(),
                 codex_error_info: None,
+                additional_details: None,
                 rejected_audio_file_ids: Vec::new(),
             }),
         })
@@ -865,6 +866,7 @@ async fn wait_for_guardian_review_preserves_structured_session_error() {
                 misalignment: None,
                 message: "temporary failure".to_string(),
                 codex_error_info: Some(CodexErrorInfo::ServerOverloaded),
+                additional_details: None,
                 rejected_audio_file_ids: Vec::new(),
             }),
         })
