@@ -7,6 +7,7 @@ use crate::common::ResponseEvent;
 use bytes::Bytes;
 use codex_client::StreamResponse;
 use codex_http_client::RetryAfter;
+use codex_protocol::error::CodexErrorDetails;
 use codex_protocol::protocol::CodexErrorInfo;
 use futures::StreamExt;
 use futures::stream;
@@ -284,5 +285,47 @@ async fn retry_header_does_not_override_terminal_errors() {
         .unwrap();
         let error = map_api_error(process_responses_event(event).unwrap_err().into_api_error());
         assert_eq!(error.retry_delay(/*retry_count*/ 1), None, "{code}");
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn provider_error_details_survive_typed_failed_responses() {
+    for (code, expected) in [
+        (
+            "context_length_exceeded",
+            CodexErrorInfo::ContextWindowExceeded,
+        ),
+        ("insufficient_quota", CodexErrorInfo::UsageLimitExceeded),
+        ("usage_not_included", CodexErrorInfo::UsageLimitExceeded),
+        ("server_is_overloaded", CodexErrorInfo::ServerOverloaded),
+    ] {
+        let provider_error = json!({
+            "code": code,
+            "message": format!("Provider detail\n{}", "x".repeat(5000)),
+            "type": "provider_failure",
+            "param": null,
+            "headers": {"retry-after": "7", "x-request-id": "provider-request"},
+            "provider_details": {"original": {"status": 529, "extra": [true, null, 42]}},
+        });
+        let event = serde_json::from_value(json!({
+            "type": "response.failed",
+            "response": {"error": provider_error},
+        }))
+        .unwrap();
+        let error = map_api_error(process_responses_event(event).unwrap_err().into_api_error());
+        assert_eq!(error.provider_error(), Some(&provider_error), "{code}");
+        assert_eq!(error.to_codex_protocol_error(), expected, "{code}");
+        assert_eq!(
+            error.retry_delay(/*retry_count*/ 1),
+            (code == "server_is_overloaded").then_some(Duration::from_secs(7)),
+            "{code}",
+        );
+        match (code, error.details()) {
+            ("context_length_exceeded", CodexErrorDetails::ContextWindowExceeded)
+            | ("insufficient_quota", CodexErrorDetails::QuotaExceeded)
+            | ("usage_not_included", CodexErrorDetails::UsageNotIncluded)
+            | ("server_is_overloaded", CodexErrorDetails::ServerOverloaded) => {}
+            _ => panic!("provider error changed semantic category: {code}"),
+        }
     }
 }

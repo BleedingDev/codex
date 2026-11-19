@@ -1429,7 +1429,7 @@ impl ThreadHistoryBuilder {
                 misalignment: payload.misalignment.clone().map(Into::into),
                 message: payload.message.clone(),
                 codex_error_info: payload.codex_error_info.clone().map(Into::into),
-                additional_details: None,
+                additional_details: payload.additional_details.clone(),
             });
             tracking_changes.then(|| ThreadHistoryTurnMetadata::from_pending_turn(turn))
         } else {
@@ -1445,7 +1445,7 @@ impl ThreadHistoryBuilder {
             message: error.message.clone(),
             codex_error_info: error.codex_error_info.clone().map(Into::into),
             misalignment: error.misalignment.clone().map(Into::into),
-            additional_details: None,
+            additional_details: error.additional_details.clone(),
         });
         let apply_abort = |turn: &mut PendingTurn| {
             turn.status = TurnStatus::Interrupted;
@@ -1499,7 +1499,7 @@ impl ThreadHistoryBuilder {
             misalignment: error.misalignment.clone().map(Into::into),
             message: error.message.clone(),
             codex_error_info: error.codex_error_info.clone().map(Into::into),
-            additional_details: None,
+            additional_details: error.additional_details.clone(),
         });
         let apply_completion = |turn: &mut PendingTurn| {
             if let Some(error) = terminal_error.as_ref() {
@@ -4884,6 +4884,7 @@ mod tests {
                     misalignment: None,
                     message: "Selected model is at capacity. Please try a different model.".into(),
                     codex_error_info: Some(CodexErrorInfo::PolicyCapacityUnavailable),
+                    additional_details: None,
                     rejected_audio_file_ids: Vec::new(),
                 }),
                 completed_at: Some(20),
@@ -5296,6 +5297,7 @@ mod tests {
                 misalignment: None,
                 message: "rollback failed".into(),
                 codex_error_info: Some(CodexErrorInfo::ThreadRollbackFailed),
+                additional_details: None,
                 rejected_audio_file_ids: Vec::new(),
             }),
         ];
@@ -5344,6 +5346,7 @@ mod tests {
                 misalignment: None,
                 message: "request-level failure".into(),
                 codex_error_info: Some(CodexErrorInfo::BadRequest),
+                additional_details: None,
                 rejected_audio_file_ids: Vec::new(),
             }),
         ];
@@ -5403,6 +5406,7 @@ mod tests {
                 codex_error_info: Some(CodexErrorInfo::ResponseStreamDisconnected {
                     http_status_code: Some(502),
                 }),
+                additional_details: None,
                 rejected_audio_file_ids: Vec::new(),
             }),
             EventMsg::TurnComplete(TurnCompleteEvent {
@@ -5469,6 +5473,7 @@ mod tests {
                     misalignment: None,
                     message: "Selected model is at capacity. Please try a different model.".into(),
                     codex_error_info: Some(CodexErrorInfo::ServerOverloaded),
+                    additional_details: None,
                     rejected_audio_file_ids: Vec::new(),
                 }),
                 completed_at: Some(20),

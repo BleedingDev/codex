@@ -7,7 +7,10 @@ use pretty_assertions::assert_eq;
 
 #[test]
 fn map_api_error_maps_server_overloaded() {
-    let err = map_api_error(ApiError::ServerOverloaded { retry_after: None });
+    let err = map_api_error(ApiError::ServerOverloaded {
+        retry_after: None,
+        provider_error: None,
+    });
     assert!(matches!(err.details(), CodexErrorDetails::ServerOverloaded));
 }
 
@@ -964,5 +967,57 @@ fn runtime_auth_denials_stop_retries_without_losing_http_diagnostics() {
                 (&body, status, Some("request-runtime"))
             );
         }
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn provider_error_details_survive_typed_http_failures() {
+    use std::time::Duration;
+
+    for (status, code, expected) in [
+        (
+            400,
+            "context_length_exceeded",
+            CodexErrorInfo::ContextWindowExceeded,
+        ),
+        (
+            429,
+            "insufficient_quota",
+            CodexErrorInfo::UsageLimitExceeded,
+        ),
+        (
+            429,
+            "usage_not_included",
+            CodexErrorInfo::UsageLimitExceeded,
+        ),
+        (
+            503,
+            "server_is_overloaded",
+            CodexErrorInfo::ServerOverloaded,
+        ),
+    ] {
+        let provider_error = serde_json::json!({
+            "type": code,
+            "code": code,
+            "message": "Provider message\nwith exact diagnostic detail",
+            "param": null,
+            "provider_details": {"request_id": "provider-request", "unknown": [1, false]},
+        });
+        let retry_after = RetryAfter::from_delay(Duration::from_secs(7));
+        let error = map_api_error(ApiError::Transport(TransportError::Http {
+            status: http::StatusCode::from_u16(status).unwrap(),
+            url: None,
+            headers: None,
+            body: Some(serde_json::json!({"error": provider_error}).to_string()),
+            retry_after,
+        }));
+        assert_eq!(error.provider_error(), Some(&provider_error), "{code}");
+        assert_eq!(error.to_codex_protocol_error(), expected, "{code}");
+        assert_eq!(error.retry_after(), retry_after, "{code}");
+        assert_eq!(
+            error.retry_delay(/*retry_count*/ 1),
+            (code == "server_is_overloaded").then_some(Duration::from_secs(7)),
+            "{code}",
+        );
     }
 }

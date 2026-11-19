@@ -212,6 +212,7 @@ async fn guardian_circuit_breaker_notifies_parent(action: CircuitBreakAction) ->
             (action == CircuitBreakAction::Strict).then_some(ErrorEvent {
                 message: warning.clone(),
                 codex_error_info: Some(CodexErrorInfo::TooManyDenials),
+                additional_details: None,
                 rejected_audio_file_ids: Vec::new(),
                 misalignment: None,
             }),

@@ -22,11 +22,11 @@ pub enum ApiError {
     #[error(transparent)]
     ResponseIncomplete(Box<ResponseIncompleteError>),
     #[error("context window exceeded")]
-    ContextWindowExceeded,
+    ContextWindowExceeded { provider_error: Option<Value> },
     #[error("quota exceeded")]
-    QuotaExceeded,
+    QuotaExceeded { provider_error: Option<Value> },
     #[error("usage not included")]
-    UsageNotIncluded,
+    UsageNotIncluded { provider_error: Option<Value> },
     #[error("session budget exceeded")]
     SessionBudgetExceeded,
     #[error("retryable error: {message}")]
@@ -80,7 +80,10 @@ pub enum ApiError {
     #[error("policy-restricted capacity unavailable")]
     PolicyCapacityUnavailable { retry_after: Option<RetryAfter> },
     #[error("server overloaded")]
-    ServerOverloaded { retry_after: Option<RetryAfter> },
+    ServerOverloaded {
+        retry_after: Option<RetryAfter>,
+        provider_error: Option<Value>,
+    },
 }
 
 impl From<RateLimitError> for ApiError {
@@ -108,7 +111,9 @@ pub(crate) fn parse_terminal_provider_error(
             })
         }
         ("context_length_exceeded", None | Some(StatusCode::BAD_REQUEST)) => {
-            Some(ApiError::ContextWindowExceeded)
+            Some(ApiError::ContextWindowExceeded {
+                provider_error: Some(error.clone()),
+            })
         }
         // A non-streaming 400 already follows the ordinary invalid-request path.
         ("invalid_access_program" | "unsupported_access_program", None) => {

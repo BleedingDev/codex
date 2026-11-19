@@ -1069,7 +1069,7 @@ pub(crate) async fn apply_bespoke_event_handling(
                 misalignment: ev.misalignment.map(Into::into),
                 message: ev.message,
                 codex_error_info: ev.codex_error_info.map(V2CodexErrorInfo::from),
-                additional_details: None,
+                additional_details: ev.additional_details,
             };
             handle_error_notification(
                 conversation_id,
@@ -1215,7 +1215,7 @@ pub(crate) async fn apply_bespoke_event_handling(
                             message: error.message,
                             codex_error_info: error.codex_error_info.map(Into::into),
                             misalignment: error.misalignment.map(Into::into),
-                            additional_details: None,
+                            additional_details: error.additional_details,
                         }),
                         last_agent_message: None,
                         started_at: aborted.started_at,
@@ -1622,7 +1622,7 @@ async fn handle_turn_interrupted(
                 message: error.message,
                 codex_error_info: error.codex_error_info.map(Into::into),
                 misalignment: error.misalignment.map(Into::into),
-                additional_details: None,
+                additional_details: error.additional_details,
             }),
             last_agent_message: None,
             started_at: turn_summary.started_at,

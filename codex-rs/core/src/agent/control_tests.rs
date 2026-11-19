@@ -622,6 +622,7 @@ async fn on_event_updates_status_from_task_complete() {
                 misalignment: None,
                 message: "denied".to_string(),
                 codex_error_info: None,
+                additional_details: None,
                 rejected_audio_file_ids: Vec::new(),
             }),
             AgentStatus::Errored("denied".to_string()),
@@ -647,6 +648,7 @@ async fn on_event_updates_status_from_error() {
         misalignment: None,
         message: "boom".to_string(),
         codex_error_info: None,
+        additional_details: None,
         rejected_audio_file_ids: Vec::new(),
     }));
 

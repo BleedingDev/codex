@@ -5994,7 +5994,10 @@ impl Session {
         message: impl Into<String>,
         codex_error: CodexErr,
     ) {
-        let additional_details = codex_error.to_string();
+        let additional_details = codex_error
+            .provider_error()
+            .map(serde_json::Value::to_string)
+            .unwrap_or_else(|| codex_error.to_string());
         let codex_error_info = CodexErrorInfo::ResponseStreamDisconnected {
             http_status_code: codex_error.http_status_code_value(),
         };

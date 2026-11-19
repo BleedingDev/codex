@@ -154,10 +154,10 @@ impl SamplingExecution {
                     | TransportError::ResponseTooLarge { .. }
                     | TransportError::Policy(_),
                 )
-                | ApiError::ContextWindowExceeded
+                | ApiError::ContextWindowExceeded { .. }
                 | ApiError::ResponseIncomplete(_)
-                | ApiError::QuotaExceeded
-                | ApiError::UsageNotIncluded
+                | ApiError::QuotaExceeded { .. }
+                | ApiError::UsageNotIncluded { .. }
                 | ApiError::SessionBudgetExceeded
                 | ApiError::RateLimit(_)
                 | ApiError::InvalidRequest { .. }

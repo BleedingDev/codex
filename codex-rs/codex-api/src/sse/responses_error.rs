@@ -25,6 +25,7 @@ struct Error {
 
 pub(super) fn parse_failed_response(response: Option<Value>) -> ApiError {
     let error = response.as_ref().and_then(|response| response.get("error"));
+    let provider_error = error.cloned();
     let retry_after_header = error
         .and_then(|error| error.get("headers"))
         .and_then(Value::as_object)
@@ -50,8 +51,8 @@ pub(super) fn parse_failed_response(response: Option<Value>) -> ApiError {
             | "credit_balance_exhausted"
             | "organization_spend_limit_exceeded"
             | "project_spend_limit_exceeded",
-        ) => ApiError::QuotaExceeded,
-        Some("usage_not_included") => ApiError::UsageNotIncluded,
+        ) => ApiError::QuotaExceeded { provider_error },
+        Some("usage_not_included") => ApiError::UsageNotIncluded { provider_error },
         Some("cyber_policy") => ApiError::CyberPolicy {
             message: cyber_policy_message(error.message),
         },
@@ -88,6 +89,7 @@ pub(super) fn parse_failed_response(response: Option<Value>) -> ApiError {
         },
         Some("server_is_overloaded") => ApiError::ServerOverloaded {
             retry_after: retry_after_header,
+            provider_error,
         },
         Some("rate_limit_exceeded" | "slow_down") => {
             let retry_after = retry_after_header

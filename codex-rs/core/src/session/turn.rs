@@ -967,13 +967,14 @@ pub(crate) async fn run_turn(
                     message: "Invalid image in your last message. Please remove it and try again."
                         .to_string(),
                     codex_error_info: Some(error),
+                    additional_details: None,
                     rejected_audio_file_ids: Vec::new(),
                 });
                 sess.send_event(&turn_context, event).await;
                 break;
             }
             Err(e) => {
-                info!("Turn error: {e:#}");
+                info!(provider_error = ?e.provider_error(), "Turn error: {e:#}");
                 if matches!(
                     e.details(),
                     CodexErrorDetails::MisalignmentPolicyViolation { .. }

@@ -707,7 +707,7 @@ async fn process_sse_with_treatment(
                 if matches!(
                     error,
                     ApiError::FlexUnavailable
-                        | ApiError::ContextWindowExceeded
+                        | ApiError::ContextWindowExceeded { .. }
                         | ApiError::InvalidRequest { .. }
                         | ApiError::SessionBudgetExceeded
                         | ApiError::InferenceHookDenied { .. }
@@ -1221,7 +1221,7 @@ mod tests {
 
         assert_eq!(events.len(), 1);
 
-        assert_matches!(events[0], Err(ApiError::ContextWindowExceeded));
+        assert_matches!(events[0], Err(ApiError::ContextWindowExceeded { .. }));
     }
 
     #[tokio::test]
@@ -1234,7 +1234,7 @@ mod tests {
 
         assert_eq!(events.len(), 1);
 
-        assert_matches!(events[0], Err(ApiError::ContextWindowExceeded));
+        assert_matches!(events[0], Err(ApiError::ContextWindowExceeded { .. }));
     }
 
     #[tokio::test]
@@ -1247,7 +1247,7 @@ mod tests {
 
         assert_eq!(events.len(), 1);
 
-        assert_matches!(events[0], Err(ApiError::QuotaExceeded));
+        assert_matches!(events[0], Err(ApiError::QuotaExceeded { .. }));
     }
 
     #[tokio::test]

@@ -305,6 +305,7 @@ pub async fn set_thread_memory_mode(sess: &Arc<Session>, sub_id: String, mode: T
                 misalignment: None,
                 message: err.to_string(),
                 codex_error_info: Some(CodexErrorInfo::Other),
+                additional_details: None,
                 rejected_audio_file_ids: Vec::new(),
             }),
         };
@@ -413,6 +414,7 @@ pub async fn shutdown(sess: &Arc<Session>, sub_id: String) -> bool {
                 misalignment: None,
                 message: "Failed to shutdown thread persistence".to_string(),
                 codex_error_info: Some(CodexErrorInfo::Other),
+                additional_details: None,
                 rejected_audio_file_ids: Vec::new(),
             }),
         };
@@ -463,6 +465,7 @@ pub async fn review(
                     misalignment: None,
                     message: err.to_string(),
                     codex_error_info: Some(CodexErrorInfo::Other),
+                    additional_details: None,
                     rejected_audio_file_ids: Vec::new(),
                 }),
             };
@@ -567,6 +570,7 @@ pub(super) async fn submission_loop(
                                 misalignment: None,
                                 message: err.to_string(),
                                 codex_error_info: Some(CodexErrorInfo::Other),
+                                additional_details: None,
                                 rejected_audio_file_ids: Vec::new(),
                             }),
                         })
@@ -722,6 +726,7 @@ pub(super) async fn submission_loop(
                                         misalignment: None,
                                         message,
                                         codex_error_info: Some(CodexErrorInfo::BadRequest),
+                                        additional_details: None,
                                         rejected_audio_file_ids: Vec::new(),
                                     }),
                                 })
