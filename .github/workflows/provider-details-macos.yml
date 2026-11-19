@@ -49,26 +49,7 @@ jobs:
           components: rustfmt
 
       - name: Check Rust formatting
-        id: formatting
-        continue-on-error: true
         run: cargo fmt --all -- --check
-
-      - name: Capture any formatting correction
-        if: ${{ steps.formatting.outcome == 'failure' }}
-        run: |
-          set -euo pipefail
-          cargo fmt --all
-          git diff --binary > "$RUNNER_TEMP/provider-details-rustfmt.patch"
-          git restore --worktree -- .
-
-      - name: Upload formatting correction
-        if: ${{ steps.formatting.outcome == 'failure' }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: provider-details-rustfmt-${{ github.sha }}
-          path: ${{ runner.temp }}/provider-details-rustfmt.patch
-          if-no-files-found: error
-          retention-days: 7
 
       - name: Restore Cargo cache
         id: cargo-cache
@@ -90,26 +71,6 @@ jobs:
         uses: ./.github/actions/setup-rusty-v8
         with:
           target: aarch64-apple-darwin
-
-      - name: Resolve workspace lockfile entries without upgrading dependencies
-        id: lockfile
-        run: |
-          set -euo pipefail
-          cargo update --workspace --offline
-          if ! git diff --quiet -- Cargo.lock; then
-            git diff --binary -- Cargo.lock > "$RUNNER_TEMP/provider-details-lock.patch"
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "::warning::Committed workspace lockfile needed correction; retained patch and lockfile hash."
-          fi
-
-      - name: Upload workspace lockfile correction
-        if: ${{ steps.lockfile.outputs.changed == 'true' }}
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: provider-details-lock-${{ github.sha }}
-          path: ${{ runner.temp }}/provider-details-lock.patch
-          if-no-files-found: error
-          retention-days: 7
 
       - name: Build the CLI with app-server dispatch
         run: cargo build --locked --release -p codex-cli --bin codex
