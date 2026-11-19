@@ -45,6 +45,30 @@ jobs:
           df -h .
 
       - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          components: rustfmt
+
+      - name: Check Rust formatting
+        id: formatting
+        continue-on-error: true
+        run: cargo fmt --all -- --check
+
+      - name: Capture any formatting correction
+        if: ${{ steps.formatting.outcome == 'failure' }}
+        run: |
+          set -euo pipefail
+          cargo fmt --all
+          git diff --binary > "$RUNNER_TEMP/provider-details-rustfmt.patch"
+          git restore --worktree -- .
+
+      - name: Upload formatting correction
+        if: ${{ steps.formatting.outcome == 'failure' }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: provider-details-rustfmt-${{ github.sha }}
+          path: ${{ runner.temp }}/provider-details-rustfmt.patch
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Restore Cargo cache
         id: cargo-cache
